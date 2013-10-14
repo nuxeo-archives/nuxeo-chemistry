@@ -236,6 +236,16 @@
       <groupId>org.apache.chemistry.opencmis</groupId>
       <artifactId>chemistry-opencmis-client-impl</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -251,6 +261,7 @@
           <excludes>
             <!-- Randomly fail to stop -->
             <exclude>**/TestNuxeoSessionAtomPub.java</exclude>
+            <exclude>**/TestNuxeoSessionBrowser.java</exclude>
             <exclude>**/TestNuxeoSessionWebServices.java</exclude>
             <!-- Inner classes -->
             <exclude>**/*Test*$*.java</exclude>
