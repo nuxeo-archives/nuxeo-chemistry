@@ -260,9 +260,11 @@
           </includes>
           <excludes>
             <!-- Randomly fail to stop -->
+ <!--
             <exclude>**/TestNuxeoSessionAtomPub.java</exclude>
             <exclude>**/TestNuxeoSessionBrowser.java</exclude>
             <exclude>**/TestNuxeoSessionWebServices.java</exclude>
+-->
             <!-- Inner classes -->
             <exclude>**/*Test*$*.java</exclude>
           </excludes>
