@@ -404,24 +404,24 @@ public abstract class NuxeoSessionTestCase extends SQLRepositoryTestCase {
 
         // check ETag header
         if (isAtomPub || isBrowser) {
-			RepositoryInfo ri = session.getRepositoryInfo();
-			String uri = ri.getThinClientUri() + ri.getId() + "/";
-			uri += (isAtomPub) ? "content?id=" : "root?objectId=";
-			uri += file.getId();
-			String eTag = file.getPropertyValue("nuxeo:contentStreamDigest");
-			String encoding = Base64.encodeBytes(
-					new String(USERNAME + ":" + PASSWORD).getBytes());
-			DefaultHttpClient client = new DefaultHttpClient();
-			HttpGet request = new HttpGet(uri);
-			request.setHeader("Authorization", "Basic " + encoding);
-			request.setHeader("If-None-Match", eTag);
-			try {
-				HttpResponse response = client.execute(request);
-				assertEquals(HttpServletResponse.SC_NOT_MODIFIED, 
-						response.getStatusLine().getStatusCode());
-			} finally {
-				client.getConnectionManager().shutdown();
-			}
+            RepositoryInfo ri = session.getRepositoryInfo();
+            String uri = ri.getThinClientUri() + ri.getId() + "/";
+            uri += (isAtomPub) ? "content?id=" : "root?objectId=";
+            uri += file.getId();
+            String eTag = file.getPropertyValue("nuxeo:contentStreamDigest");
+            String encoding = Base64.encodeBytes(
+                    new String(USERNAME + ":" + PASSWORD).getBytes());
+            DefaultHttpClient client = new DefaultHttpClient();
+            HttpGet request = new HttpGet(uri);
+            request.setHeader("Authorization", "Basic " + encoding);
+            request.setHeader("If-None-Match", eTag);
+            try {
+                HttpResponse response = client.execute(request);
+                assertEquals(HttpServletResponse.SC_NOT_MODIFIED, 
+                response.getStatusLine().getStatusCode());
+            } finally {
+                client.getConnectionManager().shutdown();
+            }
         }
 
         // get stream
