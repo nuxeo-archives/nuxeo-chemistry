@@ -1160,7 +1160,7 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         assertEquals(4, res.getNumItems().intValue());
         statement = "SELECT * FROM cmis:folder";
         res = query(statement);
-        assertEquals(4, res.getNumItems().intValue());
+        assertEquals(5, res.getNumItems().intValue());
 
         statement = "SELECT cmis:objectId, dc:description" //
                 + " FROM File" //
@@ -1177,7 +1177,7 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         assertEquals(1, res.getNumItems().intValue());
 
         // IN
-        statement = "SELECT cmis:objectId" //
+        statement = "SELECT cmis:objectId, dc:subjects" //
                 + " FROM File" //
                 + " WHERE dc:title IN ('testfile1_Title', 'xyz')";
         res = query(statement);
@@ -1207,6 +1207,14 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         String statement;
         ObjectList res;
 
+        checkQueriedValue("cmis:document", "ANY dc:subjects IN ('foo')");
+        checkQueriedValue("cmis:document", "ANY dc:subjects NOT IN ('bogus')");
+        checkQueriedValue("cmis:document", "NOT ANY dc:subjects IN ('bogus')");
+        checkQueriedValue("cmis:document", "dc:subjects IS NULL");
+        checkQueriedValue("cmis:document", 
+                "dc:subjects IS NULL OR ANY dc:subjects NOT IN ('bogus')");
+        checkQueriedValue("cmis:document", "dc:subjects IS NOT NULL");
+        
         createDocumentMyDocType();
 
         // STAR
@@ -1226,6 +1234,9 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
                 "my:date = TIMESTAMP '2010-09-30T16:04:55-02:00'");
         checkQueriedValue("MyDocType",
                 "my:date <> TIMESTAMP '1999-09-09T01:01:01Z'");
+        checkQueriedValue("MyDocType", "my:strings IS NULL");
+        checkQueriedValue("MyDocType", "NOT ANY my:strings IN ('a1')");
+        checkQueriedValue("MyDocType", "my:strings IS NULL OR ANY my:strings NOT IN ('a1')");
         try {
             statement = "SELECT cmis:objectId FROM MyDocType WHERE my:date <> TIMESTAMP 'foobar'";
             query(statement);
@@ -2097,7 +2108,7 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
                 + " LEFT JOIN File B ON A.cmis:objectId = B.cmis:objectId" //
                 + " WHERE B.dc:subjects IS NULL";
         ObjectList res = query(statement);
-        assertEquals(2, res.getNumItems().intValue());
+        assertEquals(3, res.getNumItems().intValue());
     }
 
     @Test
@@ -2106,13 +2117,26 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         nuxeotc.session = nuxeotc.openSessionAs("bob");
         init();
 
-        String statement = "SELECT A.cmis:objectId, A.dc:title, B.cmis:objectId, B.dc:title" //
+        String statement;
+        ObjectList res;
+
+        statement = "SELECT A.cmis:objectId, A.dc:title, B.cmis:objectId, B.dc:title" //
                 + " FROM cmis:folder A" //
                 + " JOIN cmis:folder B ON A.cmis:objectId = B.cmis:parentId" //
                 + " WHERE A.cmis:name = 'testfolder2_Title'" //
                 + " ORDER BY B.dc:title";
-        ObjectList res = query(statement);
+        res = query(statement);
         assertEquals(0, res.getNumItems().intValue());
+        
+        statement = "SELECT A.cmis:objectId, A.cmis:name, B.filename, C.note" //
+                + " FROM cmis:document A" //
+                + " LEFT JOIN File B ON A.cmis:objectId = B.cmis:objectId" //
+                + " LEFT JOIN Note C ON A.cmis:objectId = C.cmis:objectId" //
+                + " WHERE ANY A.nuxeo:secondaryObjectTypeIds NOT IN ('Foo')" //
+                + "   AND (A.cmis:objectTypeId NOT IN ('File')" //
+                + "     OR B.cmis:name NOT IN ('testfile3_Title', 'testfile4_Title'))";
+        res = query(statement);
+        assertEquals(2, res.getNumItems().intValue());
     }
 
     @Test
@@ -2122,7 +2146,35 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
                 + " JOIN cmis:folder B ON A.cmis:objectId = B.cmis:parentId" //
                 + " WHERE ANY A.nuxeo:secondaryObjectTypeIds NOT IN ('Foo')";
         ObjectList res = query(statement);
-        assertEquals(2, res.getNumItems().intValue());
+        assertEquals(4, res.getNumItems().intValue());
+    }
+
+    @Test
+    public void testQueryJoinWithMultipleTypes() throws Exception {
+        String statement = "SELECT A.cmis:objectId, A.cmis:name, B.filename, C.note" //
+                + " FROM cmis:document A" //
+                + " LEFT JOIN File B ON A.cmis:objectId = B.cmis:objectId" //
+                + " LEFT JOIN Note C ON A.cmis:objectId = C.cmis:objectId" //
+                + " WHERE ANY A.nuxeo:secondaryObjectTypeIds NOT IN ('Foo')" //
+                + "   AND (A.cmis:objectTypeId NOT IN ('File')" //
+                + "     OR B.cmis:name NOT IN ('testfile3_Title', 'testfile4_Title'))";
+        ObjectList res = query(statement);
+        assertEquals(3, res.getNumItems().intValue());
+    }
+
+    @Test
+    public void testQueryJoinWithMultipleBaseTypes() throws Exception {
+        String statement = "SELECT A.cmis:objectId, A.nuxeo:contentStreamDigest, B.cmis:path" //
+                + " FROM cmis:document A" //
+                + " JOIN cmis:folder B ON A.nuxeo:parentId = B.cmis:objectId" //
+                + " WHERE A.cmis:name = 'testfile1_Title'";
+        ObjectList res = query(statement);
+        assertEquals(1, res.getNumItems().intValue());
+        
+        ObjectData data = res.getObjects().get(0);
+        assertNotNull("Property A.nuxeo:contentStreamDigest should not be null", 
+                getQueryValue(data, "A.nuxeo:contentStreamDigest"));
+        assertEquals("/testfolder1", getQueryValue(data, "B.cmis:path"));
     }
 
     @Test
@@ -2758,6 +2810,12 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         // no access to testfile1 or testfile2 by john
         assertEquals(0, res.getNumItems().intValue());
 
+        // query relationship itself as john 
+        // TODO should this return 1 since no security check on relationship itself?
+        statement = "SELECT cmis:objectId, cmis:name, cmis:sourceId, cmis:targetId FROM Relation";
+        res = query(statement);
+        assertEquals(0, res.getNumItems().intValue());
+        
         // bob has Browse on testfile1 and testfile2
         nuxeotc.closeSession();
         nuxeotc.session = nuxeotc.openSessionAs("bob");
@@ -2794,7 +2852,7 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
                 "OSGI-INF/security-policy-contrib.xml");
         // check that queries now fail
         try {
-            query("SELECT cmis:objectId FROM File");
+            query("SELECT f.cmis:objectId FROM File f WHERE ANY f.dc:subjects IN ('foo')");
             fail("Should be denied due to security policy");
         } catch (CmisRuntimeException e) {
             String msg = e.getMessage();
@@ -2804,8 +2862,8 @@ public class TestNuxeoBinding extends NuxeoBindingTestCase {
         // without it it works again
         nuxeotc.undeployContrib("org.nuxeo.ecm.core.opencmis.tests.tests",
                 "OSGI-INF/security-policy-contrib.xml");
-        res = query("SELECT cmis:objectId FROM File");
-        assertEquals(3, res.getNumItems().intValue());
+        res = query("SELECT f.cmis:objectId FROM File f WHERE ANY f.dc:subjects IN ('foo')");
+        assertEquals(1, res.getNumItems().intValue());
 
         // deploy a security policy with a CMISQL transformer
         nuxeotc.deployContrib("org.nuxeo.ecm.core.opencmis.tests.tests",

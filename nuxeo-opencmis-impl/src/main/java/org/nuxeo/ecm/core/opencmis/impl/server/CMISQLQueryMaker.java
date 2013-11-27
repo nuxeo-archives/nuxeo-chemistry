@@ -319,6 +319,35 @@ public class CMISQLQueryMaker implements QueryMaker {
             String qual = canonicalQualifier.get(alias);
             qualHierTable = getTable(hierTable, qual);
 
+            // determine relevant primary types
+
+            List<String> types = new ArrayList<String>();
+            TypeDefinition td = query.getTypeDefinitionFromQueryName(typeQueryName);
+            if (td.getParentTypeId() != null) {
+                // don't add abstract root types
+                types.add(td.getId());
+            }
+            LinkedList<TypeDefinitionContainer> typesTodo = new LinkedList<TypeDefinitionContainer>();
+            typesTodo.addAll(typeManager.getTypeDescendants(td.getId(), -1,
+                    Boolean.TRUE));
+            // recurse to get all subtypes
+            TypeDefinitionContainer tc;
+            while ((tc = typesTodo.poll()) != null) {
+                types.add(tc.getTypeDefinition().getId());
+                typesTodo.addAll(tc.getChildren());
+            }
+            if (types.isEmpty()) {
+                // shoudn't happen
+                types = Collections.singletonList("__NOSUCHTYPE__");
+            }
+            StringBuilder qms = new StringBuilder();
+            for (int i = 0; i < types.size(); i++) {
+                if (i != 0) {
+                    qms.append(", ");
+                }
+                qms.append("?");
+            }
+            
             // table this join is about
             Table table;
             if (firstTable) {
@@ -359,12 +388,27 @@ public class CMISQLQueryMaker implements QueryMaker {
             }
             from.append(name);
 
-            if (!firstTable) {
+            String primaryTypeClause = String.format(
+                    "%s IN (%s)",
+                    qualHierTable.getColumn(model.MAIN_PRIMARY_TYPE_KEY).getFullQuotedName(),
+                    qms);
+            if (firstTable) {
+                whereClauses.add(primaryTypeClause);
+                whereParams.addAll(types);
+            } else {
                 // emit actual join requested
-                from.append(" ON ");
+                from.append(" ON (");
                 from.append(((Column) join.onLeft.getInfo()).getFullQuotedName());
                 from.append(" = ");
                 from.append(((Column) join.onRight.getInfo()).getFullQuotedName());
+                if (isRelation) {
+                    from.append(")");
+                } else {
+                    from.append(" AND ");
+                    from.append(primaryTypeClause);
+                    from.append(")");
+                    fromParams.addAll(types);
+                }
             }
 
             // join other fragments for qualifier
@@ -385,46 +429,19 @@ public class CMISQLQueryMaker implements QueryMaker {
                 }
                 from.append(" LEFT JOIN ");
                 from.append(n);
-                from.append(" ON ");
+                from.append(" ON (");
                 from.append(t.getColumn(Model.MAIN_KEY).getFullQuotedName());
                 from.append(" = ");
                 from.append(tableMainId);
-            }
-
-            // restrict to relevant primary types
-
-            List<String> types = new ArrayList<String>();
-            TypeDefinition td = query.getTypeDefinitionFromQueryName(typeQueryName);
-            if (td.getParentTypeId() != null) {
-                // don't add abstract root types
-                types.add(td.getId());
-            }
-            LinkedList<TypeDefinitionContainer> typesTodo = new LinkedList<TypeDefinitionContainer>();
-            typesTodo.addAll(typeManager.getTypeDescendants(td.getId(), -1,
-                    Boolean.TRUE));
-            // recurse to get all subtypes
-            TypeDefinitionContainer tc;
-            while ((tc = typesTodo.poll()) != null) {
-                types.add(tc.getTypeDefinition().getId());
-                typesTodo.addAll(tc.getChildren());
-            }
-            if (types.isEmpty()) {
-                // shoudn't happen
-                types = Collections.singletonList("__NOSUCHTYPE__");
-            }
-            StringBuilder qms = new StringBuilder();
-            for (int i = 0; i < types.size(); i++) {
-                if (i != 0) {
-                    qms.append(", ");
+                if (t.getKey().equals(Model.HIER_TABLE_NAME)) {
+                    from.append(" AND ");
+                    from.append(primaryTypeClause);
+                    from.append(")");
+                    fromParams.addAll(types);
+                } else {
+                    from.append(")");
                 }
-                qms.append("?");
             }
-
-            whereClauses.add(String.format(
-                    "%s IN (%s)",
-                    qualHierTable.getColumn(model.MAIN_PRIMARY_TYPE_KEY).getFullQuotedName(),
-                    qms));
-            whereParams.addAll(types);
 
             // lifecycle not deleted filter
 
@@ -433,8 +450,9 @@ public class CMISQLQueryMaker implements QueryMaker {
                 Column lscol = getTable(
                         database.getTable(propertyInfo.fragmentName), qual).getColumn(
                         propertyInfo.fragmentKey);
-                whereClauses.add(String.format("%s <> ?",
-                        lscol.getFullQuotedName()));
+                String lscolName = lscol.getFullQuotedName();
+                whereClauses.add(String.format("(%s <> ? OR %s IS NULL)",
+                        lscolName, lscolName));
                 whereParams.add(LifeCycleConstants.DELETED_STATE);
             }
 
@@ -445,9 +463,9 @@ public class CMISQLQueryMaker implements QueryMaker {
                 // add islatestversion = true
                 Table ver = getTable(
                         database.getTable(model.VERSION_TABLE_NAME), qual);
-                Column latestver = ver.getColumn(model.VERSION_IS_LATEST_KEY);
-                whereClauses.add(String.format("%s = ?",
-                        latestver.getFullQuotedName()));
+                Column latestvercol = ver.getColumn(model.VERSION_IS_LATEST_KEY);
+                String latestvercolName = latestvercol.getFullQuotedName();
+                whereClauses.add(String.format("(%s = ?)", latestvercolName));
                 whereParams.add(Boolean.TRUE);
             }
 
@@ -486,12 +504,23 @@ public class CMISQLQueryMaker implements QueryMaker {
                         readAclIdCol = al + '.' + model.HIER_READ_ACL_ID;
                         readAclAclIdCol = al + '.' + model.HIER_READ_ACL_ACL_ID;
                     }
-                    whereClauses.add(dialect.getReadAclsCheckSql(readAclAclIdCol));
-                    whereParams.add(principals);
-                    from.append(String.format(" JOIN %s ON %s = %s",
-                            readAclTable, tableMainId, readAclIdCol));
+                    if (!firstTable) {
+                        from.append(" LEFT");
+                    }
+                    from.append(String.format(" JOIN %s ON (%s = %s AND %s)",
+                            readAclTable, tableMainId, readAclIdCol,
+                            dialect.getReadAclsCheckSql(readAclAclIdCol)));
+                    fromParams.add(principals);
                 } else {
-                    whereClauses.add(dialect.getSecurityCheckSql(tableMainId));
+                    StringBuilder clause = new StringBuilder();
+                    clause.append(String.format("(%s", 
+                            dialect.getSecurityCheckSql(tableMainId)));
+                    if (!firstTable) {
+                        clause.append(String.format(" OR %s IS NULL", 
+                                tableMainId));
+                    }
+                    clause.append(")");
+                    whereClauses.add(clause.toString());
                     whereParams.add(principals);
                     whereParams.add(permissions);
                 }
@@ -1102,27 +1131,30 @@ public class CMISQLQueryMaker implements QueryMaker {
                     // TODO check what happens if cmis:objectId is aliased
                     String id = (String) map.get(getPropertyKey(qual,
                             PropertyIds.OBJECT_ID));
-                    try {
-                        // reentrant call to the same session, but the MapMaker
-                        // is only called from the IterableQueryResult in
-                        // queryAndFetch which manipulates no session state
-                        // TODO constructing the DocumentModel (in
-                        // NuxeoObjectData) is expensive, try to get value
-                        // directly
-                        data = (NuxeoObjectData) service.getObject(
-                                service.getNuxeoRepository().getId(), id, null,
-                                null, null, null, null, null, null);
-                    } catch (CmisRuntimeException e) {
-                        log.error("Cannot get document: " + id, e);
+                    if (id != null) {
+                        try {
+                            // reentrant call to the same session, but the MapMaker
+                            // is only called from the IterableQueryResult in
+                            // queryAndFetch which manipulates no session state
+                            // TODO constructing the DocumentModel (in
+                            // NuxeoObjectData) is expensive, try to get value
+                            // directly
+                            data = (NuxeoObjectData) service.getObject(
+                                    service.getNuxeoRepository().getId(), id, null,
+                                    null, null, null, null, null, null);
+                        } catch (CmisRuntimeException e) {
+                            log.error("Cannot get document: " + id, e);
+                        }
+                        datas.put(qual, data);
                     }
-                    datas.put(qual, data);
                 }
                 Serializable v;
                 if (data == null) {
                     // could not fetch
                     v = null;
                 } else {
-                    NuxeoPropertyDataBase<?> pd = (NuxeoPropertyDataBase<?>) data.getProperty(key);
+                    NuxeoPropertyDataBase<?> pd = (NuxeoPropertyDataBase<?>) 
+                            data.getProperty(col.getPropertyId());
                     if (pd == null) {
                         v = null;
                     } else {
@@ -1391,7 +1423,7 @@ public class CMISQLQueryMaker implements QueryMaker {
                         + col.getPropertyQueryName());
             }
             Column column = (Column) col.getInfo();
-            String qual = col.getQualifier();
+            String qual = canonicalQualifier.get(col.getQualifier());
             // we need the real table and column in the subquery
             Table realTable = column.getTable().getRealTable();
             Column realColumn = realTable.getColumn(column.getKey());
@@ -1432,7 +1464,7 @@ public class CMISQLQueryMaker implements QueryMaker {
             if (multi) {
                 // we need the real table and column in the subquery
                 Column column = (Column) col.getInfo();
-                String qual = col.getQualifier();
+                String qual = canonicalQualifier.get(col.getQualifier());
                 Table realTable = column.getTable().getRealTable();
                 Column hierMainColumn = getTable(hierTable, qual).getColumn(
                         model.MAIN_KEY);
@@ -1574,7 +1606,7 @@ public class CMISQLQueryMaker implements QueryMaker {
         public Column resolveColumn(Tree node) {
             return (Column) resolveColumnReference(node).getInfo();
         }
-
+        
         protected void walkFacets(Tree opNode, Tree colNodel, Tree literalNode) {
             boolean include;
             Set<String> mixins;
@@ -1626,11 +1658,20 @@ public class CMISQLQueryMaker implements QueryMaker {
                 }
             }
 
+            Table table;
+            if (colNodel.getChildCount() < 2) {
+                table = qualHierTable;
+            } else {
+                String alias = colNodel.getChild(0).getText();
+                String qual = canonicalQualifier.get(alias);
+                table = getTable(hierTable, qual);
+            }
+
             /*
              * SQL generation
              */
             if (!types.isEmpty()) {
-                Column col = qualHierTable.getColumn(Model.MAIN_PRIMARY_TYPE_KEY);
+                Column col = table.getColumn(Model.MAIN_PRIMARY_TYPE_KEY);
                 whereBuf.append(col.getFullQuotedName());
                 whereBuf.append(" IN ");
                 whereBuf.append('(');
