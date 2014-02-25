@@ -14,23 +14,33 @@ package org.nuxeo.ecm.core.opencmis.impl.server;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.util.GregorianCalendar;
 import java.util.List;
 
+import org.apache.chemistry.opencmis.commons.data.CacheHeaderContentStream;
 import org.apache.chemistry.opencmis.commons.data.CmisExtensionElement;
 import org.apache.chemistry.opencmis.commons.data.ContentStream;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisRuntimeException;
 import org.nuxeo.ecm.core.api.Blob;
+import org.nuxeo.ecm.core.storage.sql.coremodel.SQLBlob;
 
 /**
  * Nuxeo implementation of a CMIS {@link ContentStream}, backed by a
  * {@link Blob}.
  */
-public class NuxeoContentStream implements ContentStream {
+public class NuxeoContentStream implements CacheHeaderContentStream {
 
     protected final Blob blob;
+    
+    protected final String digest;
 
     public NuxeoContentStream(Blob blob) {
         this.blob = blob;
+        if (blob instanceof SQLBlob) {
+        	digest = ((SQLBlob) blob).getBinary().getDigest();
+        } else {
+        	digest = null;
+        }
     }
 
     @Override
@@ -71,5 +81,20 @@ public class NuxeoContentStream implements ContentStream {
     public void setExtensions(List<CmisExtensionElement> extensions) {
         throw new UnsupportedOperationException();
     }
+
+	@Override
+	public String getCacheControl() {
+		return null;
+	}
+
+	@Override
+	public String getETag() {
+		return digest;
+	}
+
+	@Override
+	public GregorianCalendar getExpires() {
+		return null;
+	}
 
 }

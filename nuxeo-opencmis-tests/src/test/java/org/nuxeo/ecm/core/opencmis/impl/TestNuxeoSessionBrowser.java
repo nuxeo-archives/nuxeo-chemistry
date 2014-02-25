@@ -19,23 +19,23 @@ import javax.servlet.Servlet;
 
 import org.apache.chemistry.opencmis.commons.SessionParameter;
 import org.apache.chemistry.opencmis.commons.enums.BindingType;
-import org.apache.chemistry.opencmis.server.impl.atompub.CmisAtomPubServlet;
+import org.apache.chemistry.opencmis.server.impl.browser.CmisBrowserBindingServlet;
 import org.nuxeo.ecm.core.opencmis.bindings.NuxeoCmisContextListener;
 
 /**
- * Test the high-level session using an AtomPub connection.
+ * Test the high-level session using an JSON Browser connection.
  */
-public class TestNuxeoSessionAtomPub extends NuxeoSessionClientServerTestCase {
+public class TestNuxeoSessionBrowser extends NuxeoSessionClientServerTestCase {
 
     @Override
     protected void addParams(Map<String, String> params) {
-        params.put(SessionParameter.BINDING_TYPE, BindingType.ATOMPUB.value());
-        params.put(SessionParameter.ATOMPUB_URL, serverURI.toString());
+        params.put(SessionParameter.BINDING_TYPE, BindingType.BROWSER.value());
+        params.put(SessionParameter.BROWSER_URL, serverURI.toString());
     }
 
     @Override
     protected Servlet getServlet() {
-        return new CmisAtomPubServlet();
+        return new CmisBrowserBindingServlet();
     }
 
     @Override
