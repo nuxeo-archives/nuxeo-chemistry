@@ -7,6 +7,10 @@
 
   <xs:include schemaLocation="core-types.xsd"/>
 
+  <xs:simpleType name="list">
+      <xs:list itemType="xs:string"/>
+  </xs:simpleType>
+
   <xs:element name="string" type="xs:string"/>
   <xs:element name="integer" type="xs:integer"/>
   <xs:element name="long" type="xs:long"/>
@@ -16,6 +20,8 @@
   <xs:element name="content" type="nxs:content"/>
 
   <xs:element name="testDefault" type="xs:string" default="the default value"/>
+
+  <xs:element name="strings" type="nxs:list"/>
 
 </xs:schema>
 
