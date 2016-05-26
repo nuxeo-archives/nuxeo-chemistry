@@ -1260,11 +1260,13 @@ public class CmisSuiteSession {
             fail("should throw RecoverableClientException");
         } catch (CmisInvalidArgumentException e) {
             // ok, this is what we get for a 400
+            // check message
+            assertEquals(DummyRecoverableExtListener.EXCEPTION_MESSAGE, e.getMessage());
         } catch (CmisRuntimeException e) {
             // check status code
             if (isHttp) {
                 fail("should have thrown CmisInvalidArgumentException");
-                // int status = StatusLoggingDefaultHttpInvoker.lastStatus;
+                // int status = StatusLoggingDefaultHttpInvoker.lastStatus;j
                 // assertEquals(400, status);
             } else {
                 Throwable cause = e.getCause();
@@ -1272,6 +1274,8 @@ public class CmisSuiteSession {
                     throw e;
                 }
             }
+            // check message
+            assertEquals(DummyRecoverableExtListener.EXCEPTION_MESSAGE, e.getMessage());
         }
     }
 
