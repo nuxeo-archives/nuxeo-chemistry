@@ -29,6 +29,8 @@ import org.nuxeo.ecm.core.event.impl.DocumentEventContext;
  */
 public class DummyRecoverableExtListener implements EventListener {
 
+    public final static String EXCEPTION_MESSAGE = "bad name";
+
     @Override
     public void handleEvent(Event event) {
         DocumentEventContext ctx = (DocumentEventContext) event.getContext();
@@ -36,7 +38,7 @@ public class DummyRecoverableExtListener implements EventListener {
         if (doc.getName().startsWith("throw")) {
             event.markBubbleException();
             String[] params = new String[] { "400" };
-            throw new RecoverableClientException("bad name", "bad name", params);
+            throw new RecoverableClientException(EXCEPTION_MESSAGE, EXCEPTION_MESSAGE, params);
         }
     }
 
