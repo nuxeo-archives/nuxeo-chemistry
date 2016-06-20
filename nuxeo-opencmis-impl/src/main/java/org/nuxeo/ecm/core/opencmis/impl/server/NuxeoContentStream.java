@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.chemistry.opencmis.commons.data.CacheHeaderContentStream;
@@ -40,7 +41,9 @@ import org.apache.chemistry.opencmis.commons.data.ContentStream;
 import org.apache.chemistry.opencmis.commons.data.LastModifiedContentStream;
 import org.apache.chemistry.opencmis.commons.data.RedirectingContentStream;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisRuntimeException;
+import org.apache.chemistry.opencmis.server.shared.Dispatcher;
 import org.apache.commons.io.input.ClosedInputStream;
+import org.apache.commons.io.input.NullInputStream;
 import org.apache.commons.io.input.ProxyInputStream;
 import org.nuxeo.ecm.core.api.Blob;
 import org.nuxeo.ecm.core.api.DocumentModel;
@@ -70,7 +73,13 @@ public class NuxeoContentStream
         // (Callers are ObjectService.GetContentStream / AbstractServiceCall.sendContentStreamHeaders)
         // Also in case we end up redirecting, we don't want to get the stream (which is possibly costly) to just have
         // it closed immediately. So we wrap in a lazy implementation
-        stream = new LazyInputStream(this::getActualStream);
+        this.stream = new LazyInputStream(this::getActualStream);
+    }
+
+    private NuxeoContentStream(Blob blob, GregorianCalendar lastModified, InputStream stream) {
+        this.blob = blob;
+        this.lastModified = lastModified;
+        this.stream = stream;
     }
 
     public static NuxeoContentStream create(DocumentModel doc, String xpath, Blob blob, String reason,
@@ -86,13 +95,31 @@ public class NuxeoContentStream
             extendedInfos = new HashMap<>(extendedInfos == null ? Collections.emptyMap() : extendedInfos);
             extendedInfos.put("redirect", uri.toString());
         }
-        DownloadService downloadService = Framework.getService(DownloadService.class);
-        downloadService.logDownload(doc, xpath, blob.getFilename(), reason, extendedInfos);
-        if (uri == null) {
-            return new NuxeoContentStream(blob, lastModified);
-        } else {
-            return new NuxeoRedirectingContentStream(blob, lastModified, uri.toString());
+        boolean isHeadRequest = isHeadRequest(request);
+        if (!isHeadRequest) {
+            DownloadService downloadService = Framework.getService(DownloadService.class);
+            downloadService.logDownload(doc, xpath, blob.getFilename(), reason, extendedInfos);
         }
+        NuxeoContentStream cs;
+        if (uri == null) {
+            cs = isHeadRequest
+                    ? new NuxeoContentStream(blob, lastModified, new NullInputStream(0))
+                    : new NuxeoContentStream(blob, lastModified);
+        } else {
+            cs = isHeadRequest
+                    ? new NuxeoRedirectingContentStream(blob, lastModified, new NullInputStream(0), uri.toString())
+                    : new NuxeoRedirectingContentStream(blob, lastModified, uri.toString());
+        }
+        return cs;
+    }
+
+    private static boolean isHeadRequest(HttpServletRequest request) {
+        boolean isHeadRequest = request != null
+                && (request.getMethod().equals(Dispatcher.METHOD_HEAD)
+                || ((request instanceof HttpServletRequestWrapper)
+                && ((HttpServletRequest) ((HttpServletRequestWrapper) request).getRequest())
+                .getMethod().equals(Dispatcher.METHOD_HEAD)));
+        return isHeadRequest;
     }
 
     @Override
@@ -233,6 +260,12 @@ public class NuxeoContentStream
 
         private NuxeoRedirectingContentStream(Blob blob, GregorianCalendar lastModified, String location) {
             super(blob, lastModified);
+            this.location = location;
+        }
+
+        private NuxeoRedirectingContentStream(Blob blob, GregorianCalendar lastModified, InputStream stream,
+                String location) {
+            super(blob, lastModified, stream);
             this.location = location;
         }
 
