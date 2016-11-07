@@ -29,13 +29,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.GregorianCalendar;
+import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Locale;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletRequestWrapper;
 
+import com.google.common.collect.Iterators;
 import org.apache.chemistry.opencmis.commons.PropertyIds;
 import org.apache.chemistry.opencmis.commons.data.ContentStream;
 import org.apache.chemistry.opencmis.commons.data.PropertyBoolean;
@@ -60,6 +64,9 @@ import org.apache.chemistry.opencmis.commons.impl.Constants;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.ContentStreamHashImpl;
 import org.apache.chemistry.opencmis.commons.server.CallContext;
 import org.apache.chemistry.opencmis.server.shared.HttpUtils;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -77,6 +84,7 @@ import org.nuxeo.ecm.core.api.model.Property;
 import org.nuxeo.ecm.core.api.model.PropertyNotFoundException;
 import org.nuxeo.ecm.core.api.model.impl.ComplexProperty;
 import org.nuxeo.ecm.core.api.model.impl.ListProperty;
+import org.nuxeo.ecm.core.blob.binary.AbstractBinaryManager;
 import org.nuxeo.ecm.core.io.download.DownloadService;
 import org.nuxeo.ecm.core.schema.DocumentType;
 import org.nuxeo.ecm.core.schema.FacetNames;
@@ -299,7 +307,8 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
         return NuxeoContentStream.create(doc, DownloadService.BLOBHOLDER_0, blob, "cmis", null, lastModified, request);
     }
 
-    public static void setContentStream(DocumentModel doc, ContentStream contentStream, boolean overwrite)
+    public static void setContentStream(DocumentModel doc, ContentStream contentStream, boolean overwrite,
+            HttpServletRequest request)
             throws IOException, CmisContentAlreadyExistsException, CmisRuntimeException {
         BlobHolder blobHolder = doc.getAdapter(BlobHolder.class);
         if (blobHolder == null) {
@@ -344,6 +353,73 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
             FileUtils.close(out);
         }
         return Blobs.createBlob(file, contentStream.getMimeType(), null, filename);
+    }
+
+    public static void validateBlobDigest(Blob blob, HttpServletRequest request) {
+        if (blob == null) {
+            return;
+        }
+        String digestAlgorithm = blob.getDigestAlgorithm();
+        if (digestAlgorithm == null) {
+            return;
+        }
+        String reqDigest = NuxeoPropertyData.extractDigestFromRequestHeaders(request, digestAlgorithm);
+        if (reqDigest == null) {
+            return;
+        }
+        String blobDigest = blob.getDigest();
+        if (!blobDigest.equals(reqDigest)) {
+            throw new CmisInvalidArgumentException(String.format(
+                    "Content Stream Hex-encoded Digest: '%s' must equal Request Header Hex-encoded Digest: '%s'",
+                    blobDigest, reqDigest));
+        }
+    }
+
+    protected static String extractDigestFromRequestHeaders(HttpServletRequest request, String digestAlgorithm) {
+        if (request == null) {
+            return null;
+        }
+        if (request instanceof HttpServletRequestWrapper) {
+            request = (HttpServletRequest) ((HttpServletRequestWrapper) request).getRequest();
+        }
+        Enumeration<String> digests = request.getHeaders("digest");
+        if (digests == null) {
+            return null;
+        }
+        String digestAlgorithmUC = digestAlgorithm.toUpperCase();
+        Iterator it = Iterators.forEnumeration(digests);
+        while (it.hasNext()) {
+            String digest = (String) it.next();
+            int equals = digest.indexOf('=');
+            if (equals < 0) {
+                continue;
+            }
+            String reqDigestAlgorithmUC = digest.substring(0, equals).toUpperCase();
+            switch (reqDigestAlgorithmUC) {
+            case AbstractBinaryManager.MD5_DIGEST:
+            case AbstractBinaryManager.SHA1_DIGEST:
+            case AbstractBinaryManager.SHA256_DIGEST:
+                break;
+            default:
+                continue;
+            }
+            digest = digest.substring(equals + 1);
+            digest = transcodeBase64ToHex(digest);
+            return digest;
+        }
+        return null;
+    }
+
+    public static String transcodeBase64ToHex(String base64String){
+        byte[] bytes = Base64.decodeBase64(base64String);
+        String hexString = Hex.encodeHexString(bytes);
+        return hexString;
+    }
+
+    public static String transcodeHexToBase64(String hexString) throws DecoderException {
+        byte[] bytes = Hex.decodeHex(hexString.toCharArray());
+        String base64String = Base64.encodeBase64String(bytes);
+        return base64String;
     }
 
     /**

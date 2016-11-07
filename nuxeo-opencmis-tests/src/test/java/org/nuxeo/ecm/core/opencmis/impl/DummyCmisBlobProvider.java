@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.servlet.http.HttpServletRequest;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.nuxeo.ecm.core.api.Blob;
 import org.nuxeo.ecm.core.blob.BlobManager.BlobInfo;
@@ -35,6 +36,7 @@ import org.nuxeo.ecm.core.blob.BlobManager.UsageHint;
 import org.nuxeo.ecm.core.blob.AbstractBlobProvider;
 import org.nuxeo.ecm.core.blob.ManagedBlob;
 import org.nuxeo.ecm.core.blob.SimpleManagedBlob;
+import org.nuxeo.ecm.core.blob.binary.AbstractBinaryManager;
 import org.nuxeo.ecm.core.model.Document;
 
 /**
@@ -66,6 +68,25 @@ public class DummyCmisBlobProvider extends AbstractBlobProvider {
             @Override
             public String getProviderId() {
                 return blobProviderId;
+            }
+
+            @Override
+            public String getDigestAlgorithm() {
+                return AbstractBinaryManager.MD5_DIGEST;
+            }
+
+            @Override
+            public String getDigest() {
+                String digest = super.getDigest();
+                if (digest == null) {
+                    try {
+                        return DigestUtils.md5Hex(getStream());
+                    } catch (IOException e) {
+                        return null;
+                    }
+                } else {
+                    return digest;
+                }
             }
 
             @Override

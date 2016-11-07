@@ -24,8 +24,10 @@ import java.io.Serializable;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -34,6 +36,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 
+import com.google.common.collect.Iterators;
 import org.apache.chemistry.opencmis.commons.data.CacheHeaderContentStream;
 import org.apache.chemistry.opencmis.commons.data.CmisExtensionElement;
 import org.apache.chemistry.opencmis.commons.data.ContentLengthContentStream;
@@ -56,6 +59,8 @@ import org.nuxeo.runtime.api.Framework;
  */
 public class NuxeoContentStream
         implements CacheHeaderContentStream, LastModifiedContentStream, ContentLengthContentStream {
+
+    public static final String CONTENT_MD5_DIGEST_ALGORITHM = "contentMD5";
 
     public static long LAST_MODIFIED;
 
@@ -112,6 +117,28 @@ public class NuxeoContentStream
             request = (HttpServletRequest) ((HttpServletRequestWrapper) request).getRequest();
         }
         return request.getMethod().equals("HEAD");
+    }
+
+    public static boolean hasWantDigestRequestHeader(HttpServletRequest request, String digestAlgorithm) {
+        if (request == null || digestAlgorithm == null) {
+            return false;
+        }
+        if (request instanceof HttpServletRequestWrapper) {
+            request = (HttpServletRequest) ((HttpServletRequestWrapper) request).getRequest();
+        }
+        Enumeration<String> values = request.getHeaders("want-digest");
+        if (values == null) {
+            return false;
+        }
+        String digestAlgorithmUC = digestAlgorithm.toUpperCase();
+        Iterator it = Iterators.forEnumeration(values);
+        while (it.hasNext()) {
+            String value = ((String) it.next()).toUpperCase();
+            if (value.startsWith(digestAlgorithmUC)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
