@@ -248,38 +248,20 @@ public class CmisSuiteSession2 {
             request.setHeader("Authorization", BASIC_AUTH);
 
             for (int i = 0; i < 2; i++) {
-                boolean goodRequest = i == 0;
+                boolean okRequest = i == 0;
 
-                request.setHeader("Digest", "md5=" + (String) (goodRequest ? contentMD5Base64 : "bogusMD5Sum"));
+                request.setHeader("Digest", "md5=" + (String) (okRequest ? contentMD5Base64 : "bogusMD5Sum"));
                 HttpEntity reqEntity = getCreateDocumentHttpEntity(files[i]);
                 request.setEntity(reqEntity);
                 try (CloseableHttpResponse response = httpClient.execute(request)) {
-                    if (goodRequest) {
-                        assertEquals(HttpServletResponse.SC_CREATED, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String expectedContentStreamHash = new ContentStreamHashImpl(
-                                ContentStreamHashImpl.ALGORITHM_MD5, contentMD5Hex).toString();
-                        Iterator iter = root.path("succinctProperties").path("cmis:contentStreamHash").getElements();
-                        boolean found = false;
-                        while (iter.hasNext()) {
-                            String hash = ((JsonNode) iter.next()).getTextValue();
-                            if (expectedContentStreamHash.equals(hash)) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        assertTrue("cmis:contentStreamHash does not contain " + expectedContentStreamHash, found);
+                    if (okRequest) {
+                        JsonNode root = checkOkContentStreamResponse(contentMD5Hex, mapper, response);
                         String objectId = root.path("succinctProperties").path("cmis:objectId").getTextValue();
                         assertNotNull(objectId);
                         coreSession.removeDocument(new IdRef(objectId));
                         coreSession.save();
                     } else {
-                        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String exception = root.path("exception").getTextValue();
-                        assertEquals("invalidArgument", exception);
+                        checkBadContentStreamResponse(mapper, response);
                     }
                 }
             }
@@ -306,7 +288,7 @@ public class CmisSuiteSession2 {
             HttpPost request = new HttpPost(uri);
             request.setHeader("Authorization", BASIC_AUTH);
             for (int i = 0; i < 2; i++) {
-                boolean goodRequest = i == 0;
+                boolean okRequest = i == 0;
 
                 List<NameValuePair> paramList = Arrays.asList(new BasicNameValuePair("cmisaction", "checkOut"));
                 HttpEntity reqEntity = new UrlEncodedFormEntity(paramList);
@@ -319,32 +301,14 @@ public class CmisSuiteSession2 {
                     assertNotNull(objectId);
                 }
 
-                request.setHeader("Digest", "md5=" + (String) (goodRequest ? contentMD5Base64 : "bogusMD5Sum"));
+                request.setHeader("Digest", "md5=" + (String) (okRequest ? contentMD5Base64 : "bogusMD5Sum"));
                 reqEntity = getCheckInHttpEntity(files[i]);
                 request.setEntity(reqEntity);
                 try (CloseableHttpResponse response = httpClient.execute(request)) {
-                    if (goodRequest) {
-                        assertEquals(HttpServletResponse.SC_CREATED, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String expectedContentStreamHash = new ContentStreamHashImpl(
-                                ContentStreamHashImpl.ALGORITHM_MD5, contentMD5Hex).toString();
-                        Iterator iter = root.path("succinctProperties").path("cmis:contentStreamHash").getElements();
-                        boolean found = false;
-                        while (iter.hasNext()) {
-                            String hash = ((JsonNode) iter.next()).getTextValue();
-                            if (expectedContentStreamHash.equals(hash)) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        assertTrue("cmis:contentStreamHash does not contain " + expectedContentStreamHash, found);
+                    if (okRequest) {
+                        checkOkContentStreamResponse(contentMD5Hex, mapper, response);
                     } else {
-                        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String exception = root.path("exception").getTextValue();
-                        assertEquals("invalidArgument", exception);
+                        checkBadContentStreamResponse(mapper, response);
                     }
                 }
             }
@@ -372,38 +336,50 @@ public class CmisSuiteSession2 {
             request.setHeader("Authorization", BASIC_AUTH);
 
             for (int i = 0; i < 2; i++) {
-                boolean goodRequest = i == 0;
+                boolean okRequest = i == 0;
 
-                request.setHeader("Digest", "md5=" + (String) (goodRequest ? contentMD5Base64 : "bogusMD5Sum"));
+                request.setHeader("Digest", "md5=" + (String) (okRequest ? contentMD5Base64 : "bogusMD5Sum"));
                 HttpEntity reqEntity = getSetContentStreamHttpEntity(files[i]);
                 request.setEntity(reqEntity);
                 try (CloseableHttpResponse response = httpClient.execute(request)) {
-                    if (goodRequest) {
-                        assertEquals(HttpServletResponse.SC_CREATED, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String expectedContentStreamHash = new ContentStreamHashImpl(
-                                ContentStreamHashImpl.ALGORITHM_MD5, contentMD5Hex).toString();
-                        Iterator iter = root.path("succinctProperties").path("cmis:contentStreamHash").getElements();
-                        boolean found = false;
-                        while (iter.hasNext()) {
-                            String hash = ((JsonNode) iter.next()).getTextValue();
-                            if (expectedContentStreamHash.equals(hash)) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        assertTrue("cmis:contentStreamHash does not contain " + expectedContentStreamHash, found);
+                    if (okRequest) {
+                        checkOkContentStreamResponse(contentMD5Hex, mapper, response);
                     } else {
-                        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatusLine().getStatusCode());
-                        InputStream is = response.getEntity().getContent();
-                        JsonNode root = mapper.readTree(is);
-                        String exception = root.path("exception").getTextValue();
-                        assertEquals("invalidArgument", exception);
+                        checkBadContentStreamResponse(mapper, response);
                     }
                 }
             }
         }
+    }
+
+    protected JsonNode checkOkContentStreamResponse(String contentMD5Hex, ObjectMapper mapper,
+            CloseableHttpResponse response) throws IOException {
+        assertEquals(HttpServletResponse.SC_CREATED, response.getStatusLine().getStatusCode());
+        InputStream is = response.getEntity().getContent();
+        JsonNode root = mapper.readTree(is);
+        String expectedContentStreamHash = new ContentStreamHashImpl(
+                ContentStreamHashImpl.ALGORITHM_MD5, contentMD5Hex).toString();
+        Iterator iter = root.path("succinctProperties").path("cmis:contentStreamHash").getElements();
+        boolean found = false;
+        while (iter.hasNext()) {
+            String hash = ((JsonNode) iter.next()).getTextValue();
+            if (expectedContentStreamHash.equals(hash)) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue("cmis:contentStreamHash does not contain " + expectedContentStreamHash, found);
+        return root;
+    }
+
+    protected JsonNode checkBadContentStreamResponse(ObjectMapper mapper, CloseableHttpResponse response)
+            throws IOException {
+        assertEquals(HttpServletResponse.SC_BAD_REQUEST, response.getStatusLine().getStatusCode());
+        InputStream is = response.getEntity().getContent();
+        JsonNode root = mapper.readTree(is);
+        String exception = root.path("exception").getTextValue();
+        assertEquals("invalidArgument", exception);
+        return root;
     }
 
     protected File[] createFiles(String content) throws IOException {

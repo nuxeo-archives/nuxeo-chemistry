@@ -80,13 +80,12 @@ public class DummyCmisBlobProvider extends AbstractBlobProvider {
                 String digest = super.getDigest();
                 if (digest == null) {
                     try {
-                        return DigestUtils.md5Hex(getStream());
+                        digest = DigestUtils.md5Hex(getStream());
                     } catch (IOException e) {
-                        return null;
+                        throw new RuntimeException(e);
                     }
-                } else {
-                    return digest;
                 }
+                return digest;
             }
 
             @Override

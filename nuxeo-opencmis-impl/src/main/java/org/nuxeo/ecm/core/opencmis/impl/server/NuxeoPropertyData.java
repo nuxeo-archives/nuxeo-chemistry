@@ -37,7 +37,6 @@ import java.util.ListIterator;
 import java.util.Locale;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletRequestWrapper;
 
 import com.google.common.collect.Iterators;
 import org.apache.chemistry.opencmis.commons.PropertyIds;
@@ -307,8 +306,7 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
         return NuxeoContentStream.create(doc, DownloadService.BLOBHOLDER_0, blob, "cmis", null, lastModified, request);
     }
 
-    public static void setContentStream(DocumentModel doc, ContentStream contentStream, boolean overwrite,
-            HttpServletRequest request)
+    public static void setContentStream(DocumentModel doc, ContentStream contentStream, boolean overwrite)
             throws IOException, CmisContentAlreadyExistsException, CmisRuntimeException {
         BlobHolder blobHolder = doc.getAdapter(BlobHolder.class);
         if (blobHolder == null) {
@@ -355,7 +353,8 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
         return Blobs.createBlob(file, contentStream.getMimeType(), null, filename);
     }
 
-    public static void validateBlobDigest(Blob blob, HttpServletRequest request) {
+    public static void validateBlobDigest(DocumentModel doc, HttpServletRequest request) {
+        Blob blob = doc.getAdapter(BlobHolder.class).getBlob();
         if (blob == null) {
             return;
         }
@@ -379,14 +378,11 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
         if (request == null) {
             return null;
         }
-        if (request instanceof HttpServletRequestWrapper) {
-            request = (HttpServletRequest) ((HttpServletRequestWrapper) request).getRequest();
-        }
-        Enumeration<String> digests = request.getHeaders("digest");
+        Enumeration<String> digests = request.getHeaders(NuxeoContentStream.DIGEST_HEADER_NAME);
         if (digests == null) {
             return null;
         }
-        String digestAlgorithmUC = digestAlgorithm.toUpperCase();
+        String digestAlgorithmLC = digestAlgorithm.toLowerCase();
         Iterator it = Iterators.forEnumeration(digests);
         while (it.hasNext()) {
             String digest = (String) it.next();
@@ -394,13 +390,8 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
             if (equals < 0) {
                 continue;
             }
-            String reqDigestAlgorithmUC = digest.substring(0, equals).toUpperCase();
-            switch (reqDigestAlgorithmUC) {
-            case AbstractBinaryManager.MD5_DIGEST:
-            case AbstractBinaryManager.SHA1_DIGEST:
-            case AbstractBinaryManager.SHA256_DIGEST:
-                break;
-            default:
+            String reqDigestAlgorithmLC = digest.substring(0, equals).toLowerCase();
+            if (!NuxeoContentStream.BINARY_MANAGER_DIGESTS.contains(reqDigestAlgorithmLC)) {
                 continue;
             }
             digest = digest.substring(equals + 1);
@@ -416,8 +407,13 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
         return hexString;
     }
 
-    public static String transcodeHexToBase64(String hexString) throws DecoderException {
-        byte[] bytes = Hex.decodeHex(hexString.toCharArray());
+    public static String transcodeHexToBase64(String hexString) {
+        byte[] bytes = null;
+        try {
+            bytes = Hex.decodeHex(hexString.toCharArray());
+        } catch (DecoderException e) {
+            throw new RuntimeException(e);
+        }
         String base64String = Base64.encodeBase64String(bytes);
         return base64String;
     }

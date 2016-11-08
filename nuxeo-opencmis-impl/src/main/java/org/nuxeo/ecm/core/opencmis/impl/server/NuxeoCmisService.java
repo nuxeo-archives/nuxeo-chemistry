@@ -114,7 +114,6 @@ import org.apache.chemistry.opencmis.commons.spi.BindingsObjectFactory;
 import org.apache.chemistry.opencmis.commons.spi.Holder;
 import org.apache.chemistry.opencmis.server.support.wrapper.AbstractCmisServiceWrapper;
 import org.apache.chemistry.opencmis.server.support.wrapper.CallContextAwareCmisService;
-import org.apache.commons.codec.DecoderException;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -141,7 +140,6 @@ import org.nuxeo.ecm.core.api.NuxeoException;
 import org.nuxeo.ecm.core.api.PathRef;
 import org.nuxeo.ecm.core.api.PropertyException;
 import org.nuxeo.ecm.core.api.VersioningOption;
-import org.nuxeo.ecm.core.api.blobholder.BlobHolder;
 import org.nuxeo.ecm.core.api.impl.CompoundFilter;
 import org.nuxeo.ecm.core.api.impl.FacetFilter;
 import org.nuxeo.ecm.core.api.impl.LifeCycleFilter;
@@ -612,7 +610,7 @@ public class NuxeoCmisService extends AbstractCmisService
         if (setContentStream) {
             try {
                 request = (HttpServletRequest) getCallContext().get(CallContext.HTTP_SERVLET_REQUEST);
-                NuxeoPropertyData.setContentStream(doc, contentStream, true, request);
+                NuxeoPropertyData.setContentStream(doc, contentStream, true);
             } catch (CmisContentAlreadyExistsException e) {
                 // cannot happen, overwrite = true
             } catch (IOException e) {
@@ -630,8 +628,7 @@ public class NuxeoCmisService extends AbstractCmisService
             doc = coreSession.saveDocument(doc);
         }
         if (setContentStream) {
-            Blob blob = coreSession.getDocument(doc.getRef()).getAdapter(BlobHolder.class).getBlob();
-            NuxeoPropertyData.validateBlobDigest(blob, request);
+            NuxeoPropertyData.validateBlobDigest(doc, request);
         }
         data.doc = doc;
         save();
@@ -886,23 +883,21 @@ public class NuxeoCmisService extends AbstractCmisService
             if (AbstractBinaryManager.MD5_DIGEST.equals(digestAlgorithm) &&
                     NuxeoContentStream.hasWantDigestRequestHeader(request,
                             NuxeoContentStream.CONTENT_MD5_DIGEST_ALGORITHM)) {
-                setResponseHeader("Content-MD5", callContext, blob);
+                setResponseHeader(NuxeoContentStream.CONTENT_MD5_HEADER_NAME, callContext, blob);
             }
             if (NuxeoContentStream.hasWantDigestRequestHeader(request, blob.getDigestAlgorithm())) {
-                setResponseHeader("Digest", callContext, blob);
+                setResponseHeader(NuxeoContentStream.DIGEST_HEADER_NAME, callContext, blob);
             }
         }
         return cs;
     }
 
     protected void setResponseHeader(String headerName, CallContext callContext, Blob blob) {
-        try {
-            String digest = NuxeoPropertyData.transcodeHexToBase64(blob.getDigest());
-            HttpServletResponse response = (HttpServletResponse) callContext.get(CallContext.HTTP_SERVLET_RESPONSE);
-            String digestPrefix = "Digest".equals(headerName) ? blob.getDigestAlgorithm() + "=" : "";
-            response.setHeader(headerName, digestPrefix + digest);
-        } catch (DecoderException ignored) {
-        }
+        String digest = NuxeoPropertyData.transcodeHexToBase64(blob.getDigest());
+        HttpServletResponse response = (HttpServletResponse) callContext.get(CallContext.HTTP_SERVLET_RESPONSE);
+        String digestPrefix = NuxeoContentStream.DIGEST_HEADER_NAME.equalsIgnoreCase(headerName)
+                ? blob.getDigestAlgorithm() + "=" : "";
+        response.setHeader(headerName, digestPrefix + digest);
     }
 
     /**
@@ -1140,10 +1135,9 @@ public class NuxeoCmisService extends AbstractCmisService
         // TODO test doc checkout state
         try {
             HttpServletRequest request = (HttpServletRequest) getCallContext().get(CallContext.HTTP_SERVLET_REQUEST);
-            NuxeoPropertyData.setContentStream(doc, contentStream, !Boolean.FALSE.equals(overwriteFlag), request);
-            coreSession.saveDocument(doc);
-            Blob blob = coreSession.getDocument(doc.getRef()).getAdapter(BlobHolder.class).getBlob();
-            NuxeoPropertyData.validateBlobDigest(blob, request);
+            NuxeoPropertyData.setContentStream(doc, contentStream, !Boolean.FALSE.equals(overwriteFlag));
+            doc = coreSession.saveDocument(doc);
+            NuxeoPropertyData.validateBlobDigest(doc, request);
             save();
         } catch (IOException e) {
             throw new CmisRuntimeException(e.toString(), e);
@@ -1954,17 +1948,16 @@ public class NuxeoCmisService extends AbstractCmisService
         if (setContentStream) {
             try {
                 request = (HttpServletRequest) getCallContext().get(CallContext.HTTP_SERVLET_REQUEST);
-                NuxeoPropertyData.setContentStream(doc, contentStream, true, request);
+                NuxeoPropertyData.setContentStream(doc, contentStream, true);
             } catch (IOException e) {
                 throw new CmisRuntimeException(e.toString(), e);
             }
         }
         // comment for save event
         doc.putContextData("comment", checkinComment);
-        coreSession.saveDocument(doc);
+        doc = coreSession.saveDocument(doc);
         if (setContentStream) {
-            Blob blob = coreSession.getDocument(doc.getRef()).getAdapter(BlobHolder.class).getBlob();
-            NuxeoPropertyData.validateBlobDigest(blob, request);
+            NuxeoPropertyData.validateBlobDigest(doc, request);
         }
         DocumentRef ver;
         try {
