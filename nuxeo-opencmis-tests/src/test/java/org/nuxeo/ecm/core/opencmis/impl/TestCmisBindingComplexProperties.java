@@ -199,8 +199,11 @@ public class TestCmisBindingComplexProperties extends TestCmisBindingBase {
         }
         PropertyString prop = bof.createPropertyStringData("complexTest:listItem", stringArr);
         Properties props = bof.createPropertiesData(Collections.<PropertyData<?>> singletonList(prop));
+        ObjectData ob = objService.getObject(repositoryId, doc.getId(), null, null, null, null, null, null, null);
         Holder<String> objectIdHolder = new Holder<String>(doc.getId());
-        objService.updateProperties(repositoryId, objectIdHolder, null, props, null);
+        Holder<String> changeTokenHolder = new Holder<>(
+                (String) ob.getProperties().getProperties().get("cmis:changeToken").getFirstValue());
+        objService.updateProperties(repositoryId, objectIdHolder, changeTokenHolder, props, null);
 
         // Verify the properties produced in Nuxeo match the input JSON
         session.save();
@@ -308,8 +311,11 @@ public class TestCmisBindingComplexProperties extends TestCmisBindingBase {
 
         // Set the property as a JSON string through the CMIS service
         Properties props = createProperties("complexTest:complexItem", jsonStr);
+        ObjectData ob = objService.getObject(repositoryId, doc.getId(), null, null, null, null, null, null, null);
         Holder<String> objectIdHolder = new Holder<String>(doc.getId());
-        objService.updateProperties(repositoryId, objectIdHolder, null, props, null);
+        Holder<String> changeTokenHolder = new Holder<>(
+                (String) ob.getProperties().getProperties().get("cmis:changeToken").getFirstValue());
+        objService.updateProperties(repositoryId, objectIdHolder, changeTokenHolder, props, null);
 
         // Verify the properties produced in Nuxeo match the input JSON
         session.save();
