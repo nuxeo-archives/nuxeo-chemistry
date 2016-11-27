@@ -59,9 +59,11 @@ import org.apache.chemistry.opencmis.commons.exceptions.CmisContentAlreadyExists
 import org.apache.chemistry.opencmis.commons.exceptions.CmisInvalidArgumentException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisRuntimeException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisStreamNotSupportedException;
+import org.apache.chemistry.opencmis.commons.exceptions.CmisUpdateConflictException;
 import org.apache.chemistry.opencmis.commons.impl.Constants;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.ContentStreamHashImpl;
 import org.apache.chemistry.opencmis.commons.server.CallContext;
+import org.apache.chemistry.opencmis.commons.spi.Holder;
 import org.apache.chemistry.opencmis.server.shared.HttpUtils;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Base64;
@@ -141,7 +143,8 @@ public abstract class NuxeoPropertyData<T> extends NuxeoPropertyDataBase<T> {
             return (PropertyData<U>) new NuxeoPropertyDateTimeData((PropertyDefinition<GregorianCalendar>) pd, doc,
                     NuxeoTypeHelper.NX_DC_MODIFIED, true, callContext);
         } else if (PropertyIds.CHANGE_TOKEN.equals(name)) {
-            return (PropertyData<U>) new NuxeoPropertyStringDataFixed((PropertyDefinition<String>) pd, null);
+            return (PropertyData<U>) new NuxeoPropertyStringDataFixed((PropertyDefinition<String>) pd,
+                    doc.getChangeToken());
         } else if (PropertyIds.NAME.equals(name)) {
             return (PropertyData<U>) new NuxeoPropertyDataName((PropertyDefinition<String>) pd, doc);
         } else if (PropertyIds.IS_IMMUTABLE.equals(name)) {
