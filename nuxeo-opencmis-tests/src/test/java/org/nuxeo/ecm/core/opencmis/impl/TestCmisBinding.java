@@ -128,6 +128,7 @@ import org.apache.chemistry.opencmis.commons.exceptions.CmisInvalidArgumentExcep
 import org.apache.chemistry.opencmis.commons.exceptions.CmisObjectNotFoundException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisRuntimeException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisUpdateConflictException;
+import org.apache.chemistry.opencmis.commons.exceptions.CmisVersioningException;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.AccessControlEntryImpl;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.AccessControlListImpl;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.AccessControlPrincipalDataImpl;
@@ -152,6 +153,8 @@ import org.nuxeo.ecm.core.api.security.ACP;
 import org.nuxeo.ecm.core.api.security.SecurityConstants;
 import org.nuxeo.ecm.core.api.security.impl.ACLImpl;
 import org.nuxeo.ecm.core.api.security.impl.ACPImpl;
+import org.nuxeo.ecm.core.opencmis.impl.client.NuxeoBinding;
+import org.nuxeo.ecm.core.opencmis.impl.server.NuxeoCmisService;
 import org.nuxeo.ecm.core.opencmis.impl.server.NuxeoRepository;
 import org.nuxeo.ecm.core.opencmis.impl.server.NuxeoTypeHelper;
 import org.nuxeo.ecm.core.opencmis.tests.Helper;
@@ -2889,6 +2892,7 @@ public class TestCmisBinding extends TestCmisBindingBase {
 
     @Test
     public void testCancelCheckout() throws Exception {
+        // initial VersioningState.CHECKEDOUT
         ObjectData ob = getObjectByPath("/testfolder1/testfile1");
         String id = ob.getId();
         waitForAsyncCompletion();
@@ -2899,6 +2903,53 @@ public class TestCmisBinding extends TestCmisBindingBase {
         } catch (CmisObjectNotFoundException e) {
             // ok
         }
+
+        // initial VersioningState.CHECKEDOUT and set property org.nuxeo.cmis.errorOnCancelCheckOutOfDraftVersion
+        ((NuxeoBinding) binding).getNuxeoCmisService().setErrorOnCancelCheckOutOfDraftVersion(true);
+
+        ob = getObjectByPath("/testfolder1/testfile2");
+        id = ob.getId();
+        try {
+            verService.cancelCheckOut(repositoryId, id, null);
+        } catch (CmisVersioningException e) {
+            // ok
+        }
+        ob = getObject(id);
+        assertEquals(id, ob.getId());
+        checkValue(PropertyIds.VERSION_LABEL, null, ob);
+        checkValue(PropertyIds.VERSION_SERIES_ID, NOT_NULL, ob);
+        checkValue(PropertyIds.IS_VERSION_SERIES_CHECKED_OUT, Boolean.TRUE, ob);
+
+        ((NuxeoBinding) binding).getNuxeoCmisService().setErrorOnCancelCheckOutOfDraftVersion(false);
+
+        // VersioningState.CHECKEDOUT after VersioningState.MAJOR
+        Properties props = createProperties("dc:title", "newtitle");
+        byte[] bytes = "foo-bar".getBytes("UTF-8");
+        ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+        ContentStream cs = new ContentStreamImpl("test.pdf", BigInteger.valueOf(bytes.length), "application/pdf", in);
+
+        Holder<String> idHolder = new Holder<>(id);
+        verService.checkIn(repositoryId, idHolder, Boolean.TRUE, props, cs, "comment", null, null, null, null);
+        String vid = idHolder.getValue();
+        ObjectData ver = getObject(vid);
+        checkValue(PropertyIds.IS_LATEST_VERSION, Boolean.TRUE, ver);
+        checkValue(PropertyIds.VERSION_LABEL, "1.0", ver);
+        checkValue(PropertyIds.CHECKIN_COMMENT, "comment", ver);
+        checkValue("dc:title", "newtitle", ver);
+
+        verService.checkOut(repositoryId, idHolder, null, null);
+        String pwcId = idHolder.getValue();
+        ObjectData pwc = getObject(pwcId);
+        checkValue(PropertyIds.VERSION_LABEL, null, pwc);
+        checkValue(PropertyIds.VERSION_SERIES_ID, NOT_NULL, pwc);
+        checkValue(PropertyIds.IS_VERSION_SERIES_CHECKED_OUT, Boolean.TRUE, pwc);
+
+        verService.cancelCheckOut(repositoryId, pwcId, null);
+        ob = getObject(id);
+        assertEquals(id, ob.getId());
+        checkValue(PropertyIds.VERSION_LABEL, "1.0", ob);
+        checkValue(PropertyIds.VERSION_SERIES_ID, NOT_NULL, ob);
+        checkValue(PropertyIds.IS_VERSION_SERIES_CHECKED_OUT, Boolean.FALSE, ob);
     }
 
     @Test
