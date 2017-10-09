@@ -81,7 +81,7 @@ public class TestCmisBindingRenditions extends TestCmisBindingBase {
 
         // list renditions
         List<RenditionData> renditions = objService.getRenditions(repositoryId, ob.getId(), "*", null, null, null);
-        assertEquals(4, renditions.size());
+        assertEquals(5, renditions.size());
         Collections.sort(renditions, RENDITION_CMP);
 
         RenditionData ren;
@@ -91,7 +91,7 @@ public class TestCmisBindingRenditions extends TestCmisBindingBase {
         assertEquals("image/png", ren.getMimeType());
         assertTrue(ren.getTitle().endsWith(".png"));
 
-        ren = renditions.get(1);
+        ren = renditions.get(2);
         assertEquals("nuxeo:rendition", ren.getKind());
         assertEquals("nuxeo:rendition:pdf", ren.getStreamId());
         assertEquals("application/pdf", ren.getMimeType());
