@@ -61,10 +61,6 @@ import org.mortbay.thread.QueuedThreadPool;
 import org.nuxeo.ecm.core.opencmis.tests.StatusLoggingDefaultHttpInvoker;
 import org.nuxeo.ecm.core.test.CoreFeature;
 import org.nuxeo.ecm.platform.web.common.requestcontroller.filter.NuxeoRequestControllerFilter;
-import org.nuxeo.ecm.platform.web.common.requestcontroller.service.FilterConfigDescriptor;
-import org.nuxeo.ecm.platform.web.common.requestcontroller.service.RequestControllerManager;
-import org.nuxeo.ecm.platform.web.common.requestcontroller.service.RequestControllerService;
-import org.nuxeo.runtime.api.Framework;
 import org.nuxeo.runtime.test.runner.Deploy;
 import org.nuxeo.runtime.test.runner.FeaturesRunner;
 
@@ -74,6 +70,7 @@ import org.nuxeo.runtime.test.runner.FeaturesRunner;
  * This is abstract, so subclasses can specify if AtomPub, Browser Bindings or Web Services are used
  */
 @Deploy("org.nuxeo.ecm.platform.web.common")
+@Deploy("org.nuxeo.ecm.core.opencmis.tests.tests:OSGI-INF/filter-config.xml")
 public abstract class CmisFeatureSessionHttp extends CmisFeatureSession {
 
     private static final Log log = LogFactory.getLog(CmisFeatureSessionHttp.class);
@@ -167,11 +164,6 @@ public abstract class CmisFeatureSessionHttp extends CmisFeatureSession {
     }
 
     protected void setUpServer() throws Exception {
-        RequestControllerService ctrl = (RequestControllerService) Framework.getService(RequestControllerManager.class);
-        // use transactional config
-        FilterConfigDescriptor conf = new FilterConfigDescriptor("cmis-test", ".*", true, true, false, false, false,
-                null);
-        ctrl.registerFilterConfig(conf);
         if (USE_TOMCAT) {
             setUpTomcat();
         } else {
