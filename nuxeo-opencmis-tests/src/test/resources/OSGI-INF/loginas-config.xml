@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<component name="org.nuxeo.login.test.config">
+
+  <extension target="org.nuxeo.runtime.LoginAsComponent" point="implementation">
+    <implementation class="org.nuxeo.ecm.platform.ui.web.auth.service.LoginAsImpl" priority="200" />
+  </extension>
+
+</component>

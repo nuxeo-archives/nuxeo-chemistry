@@ -63,6 +63,7 @@ import org.nuxeo.runtime.test.runner.RunnerFeature;
 @Deploy("org.nuxeo.ecm.core.opencmis.tests.tests:OSGI-INF/validation-contrib.xml")
 @Deploy("org.nuxeo.ecm.core.opencmis.tests.tests:OSGI-INF/disable-thumbnail-listener.xml")
 @Deploy("org.nuxeo.ecm.core.opencmis.tests.tests:OSGI-INF/disable-filemanager-icon-listener.xml")
+@Deploy("org.nuxeo.ecm.core.opencmis.tests.tests:OSGI-INF/loginas-config.xml")
 public class CmisFeature implements RunnerFeature {
 
     @Override
